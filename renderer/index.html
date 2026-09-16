@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="pi-plugin-chrome" content="v3" />
+    <title>会话通知</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #181818;
+        --surface: #212121;
+        --fg: #f4f4f5;
+        --muted: color-mix(in oklab, #ffffff 52%, transparent);
+        --faint: color-mix(in oklab, #ffffff 38%, transparent);
+        --border: color-mix(in oklab, #ffffff 10%, transparent);
+        --ok: #86efac;
+        --bad: #fca5a5;
+        --capsule: 104px;
+        --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      :root[data-base="light"] {
+        color-scheme: light;
+        --bg: #f7f7f8;
+        --surface: #ffffff;
+        --fg: #1a1c1f;
+        --muted: #5d5d5d;
+        --faint: #8a8a8a;
+        --border: color-mix(in oklab, #1a1c1f 10%, transparent);
+        --ok: #15803d;
+        --bad: #b91c1c;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        overflow: hidden;
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      button, input, textarea { -webkit-app-region: no-drag; }
+      [hidden] { display: none !important; }
+      .titlebar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: var(--pi-plugin-titlebar-height, 46px);
+        padding: 0 12px;
+        padding-right: calc(var(--capsule) + 12px);
+        -webkit-app-region: drag;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in oklab, var(--bg) 88%, transparent);
+      }
+      .titlebar h1 {
+        margin: 0;
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .titlebar .spacer { flex: 1; }
+      .icon-btn {
+        -webkit-app-region: no-drag;
+        appearance: none;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      .icon-btn:hover { filter: brightness(1.08); }
+      .scroller {
+        height: calc(100dvh - var(--pi-plugin-titlebar-height, 46px));
+        overflow: auto;
+        padding: 16px 16px 28px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .hint { color: var(--faint); font-size: 12px; margin: 0 0 10px; }
+      .empty { color: var(--muted); margin: 0; }
+      button {
+        appearance: none;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--bg);
+        color: var(--fg);
+        padding: 7px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+      button.danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 40%, transparent); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .toggle.on, .chip.on {
+        background: var(--fg);
+        color: var(--bg);
+        border-color: transparent;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        background: var(--bg);
+      }
+      .bar:last-child { margin-bottom: 0; }
+      .bar-main { min-width: 0; flex: 1; }
+      .bar-name {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--ok);
+        flex: none;
+      }
+      .bar-url {
+        color: var(--muted);
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bar-actions { display: flex; gap: 6px; flex: none; }
+      .bar-actions button { padding: 5px 10px; font-size: 12px; }
+      .add-btn { width: 100%; margin-top: 10px; }
+      .log { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+      .log-item {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+      .log-item .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .log-item .meta { color: var(--muted); margin-top: 4px; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        flex: none;
+      }
+      .badge.ok {
+        color: var(--ok);
+        background: color-mix(in oklab, var(--ok) 18%, transparent);
+      }
+      .badge.bad {
+        color: var(--bad);
+        background: color-mix(in oklab, var(--bad) 18%, transparent);
+      }
+      .var-btn {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 11px;
+        padding: 5px 8px;
+        border-radius: 8px;
+      }
+      .float-card {
+        position: fixed;
+        z-index: 50;
+        max-width: 280px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: 0 14px 36px color-mix(in oklab, #000 32%, transparent);
+        pointer-events: none;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .float-card .float-title { font-weight: 600; color: var(--fg); margin-bottom: 4px; }
+      .float-card .float-body { color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+      .overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: color-mix(in oklab, #000 46%, transparent);
+        padding: calc(var(--pi-plugin-titlebar-height, 46px) + 12px) 12px 16px;
+      }
+      .overlay.open { display: flex; }
+      .sheet {
+        margin: auto;
+        width: min(420px, 100%);
+        max-height: 100%;
+        overflow: auto;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 18px 48px color-mix(in oklab, #000 36%, transparent);
+      }
+      .sheet h2 { margin: 0 0 12px; font-size: 15px; }
+      label.field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      input[type="text"], textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+        color: var(--fg);
+        font: inherit;
+        padding: 8px 10px;
+      }
+      textarea { min-height: 72px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+      .pick { position: relative; }
+      .pick-trigger {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        border-radius: 10px;
+        text-align: left;
+      }
+      .pick-menu {
+        display: none;
+        position: absolute;
+        z-index: 6;
+        left: 0;
+        right: 0;
+        top: calc(100% + 6px);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: 0 12px 32px color-mix(in oklab, #000 28%, transparent);
+        padding: 6px;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .pick.open .pick-menu { display: flex; }
+      .pick-option {
+        width: 100%;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--fg);
+        padding: 8px 10px;
+        text-align: left;
+      }
+      .pick-option:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
+      .pick-option.selected { background: color-mix(in oklab, var(--ok) 16%, transparent); }
+      .pick-option.muted { color: var(--muted); }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { padding: 6px 10px; font-size: 12px; }
+      .sheet-actions { display: flex; gap: 8px; margin-top: 8px; }
+      .sheet-actions .spacer { flex: 1; }
+      .apply-link {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        font: inherit;
+        color: #38bdf8;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+        margin-left: 6px;
+        white-space: nowrap;
+        -webkit-app-region: no-drag;
+      }
+      .apply-link:hover { filter: brightness(1.12); }
+      :root[data-base="light"] .apply-link { color: #0284c7; }
+    </style>
+  </head>
+  <body>
+    <header class="titlebar">
+      <h1 id="heading">会话通知</h1>
+      <span class="spacer"></span>
+      <button type="button" class="icon-btn" id="settings" aria-label="设置">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.4 1.2h3.2l.25 1.55.85.35 1.35-.75 1.6 1.6-.75 1.35.35.85L15 6.4v3.2l-1.55.25-.35.85.75 1.35-1.6 1.6-1.35-.75-.85.35L9.6 14.8H6.4l-.25-1.55-.85-.35-1.35.75-1.6-1.6.75-1.35-.35-.85L1 9.6V6.4l1.55-.25.35-.85-.75-1.35 1.6-1.6 1.35.75.85-.35zm1.6 4.05A2.75 2.75 0 1 0 8 10.75 2.75 2.75 0 0 0 8 5.25z"/></svg>
+      </button>
+    </header>
+    <main class="scroller">
+      <p class="hint" id="lede">状态变化时只发送标题和状态。可重复添加同类型，每条自己起名、自己启用。</p>
+      <section class="card">
+        <div class="row" style="margin-bottom: 10px;"><strong id="channels-title">推送方式</strong></div>
+        <div id="channels"></div>
+        <button type="button" class="add-btn" id="add">添加推送</button>
+      </section>
+      <section class="card">
+        <strong id="log-title">最近推送</strong>
+        <div class="log" id="log"></div>
+      </section>
+    </main>
+    <div class="overlay" id="overlay">
+      <div class="sheet" id="sheet">
+        <h2 id="sheet-title">添加推送</h2>
+        <label class="field"><span id="type-label">类型</span>
+          <div class="pick" id="type-pick">
+            <button type="button" class="pick-trigger" id="type-trigger">
+              <span id="type-value">飞书</span>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4.2 6.2a.7.7 0 0 1 1-.05L8 8.8l2.8-2.65a.7.7 0 1 1 1 1L8.5 10.2a.7.7 0 0 1-1 0L4.25 7.15a.7.7 0 0 1-.05-1z"/></svg>
+            </button>
+            <div class="pick-menu" id="type-menu"></div>
+          </div>
+        </label>
+        <p class="hint" id="type-hint-wrap"><span id="type-hint"></span><button type="button" class="apply-link" id="apply-link" hidden>申请地址→</button></p>
+        <label class="field"><span id="name-label">名称</span><input id="name" type="text" /></label>
+        <label class="field" id="url-field"><span id="url-label">Webhook 地址</span><input id="url" type="text" /></label>
+        <div class="chips" id="var-buttons" hidden></div>
+        <label class="field" id="secret-field"><span id="secret-label">签名密钥（可选）</span><input id="secret" type="text" /></label>
+        <label class="field" id="sendkey-field" hidden><span id="sendkey-label">SendKey</span><input id="sendKey" type="text" /></label>
+        <div id="telegram-fields" hidden>
+          <label class="field"><span id="token-label">Bot Token</span><input id="botToken" type="text" /></label>
+          <label class="field"><span id="chat-label">Chat ID</span><input id="chatId" type="text" /></label>
+        </div>
+        <div id="api-fields">
+          <label class="field"><span id="method-label">方法</span>
+            <div class="pick" id="method-pick">
+              <button type="button" class="pick-trigger" id="method-trigger">
+                <span id="method-value">POST</span>
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4.2 6.2a.7.7 0 0 1 1-.05L8 8.8l2.8-2.65a.7.7 0 1 1 1 1L8.5 10.2a.7.7 0 0 1-1 0L4.25 7.15a.7.7 0 0 1-.05-1z"/></svg>
+              </button>
+              <div class="pick-menu" id="method-menu">
+                <button type="button" class="pick-option selected" data-method="POST">POST</button>
+                <button type="button" class="pick-option" data-method="PUT">PUT</button>
+                <button type="button" class="pick-option" data-method="GET">GET</button>
+              </div>
+            </div>
+          </label>
+          <label class="field"><span id="headers-label">请求头（可选）</span><textarea id="headers"></textarea></label>
+          <label class="field"><span id="body-label">正文模板</span><textarea id="bodyTemplate"></textarea></label>
+        </div>
+        <label class="field"><span id="proxy-channel-label">代理</span>
+          <div class="chips">
+            <button type="button" class="chip" id="use-proxy">使用代理</button>
+          </div>
+        </label>
+        <label class="field"><span id="events-label">通知事件</span>
+          <div class="chips" id="event-chips"></div>
+        </label>
+        <div class="sheet-actions">
+          <button type="button" class="danger" id="delete" hidden>删除</button>
+          <span class="spacer"></span>
+          <button type="button" id="cancel">取消</button>
+          <button type="button" class="primary" id="save">保存</button>
+        </div>
+      </div>
+    </div>
+    <div class="overlay" id="settings-overlay">
+      <div class="sheet">
+        <h2 id="settings-title">设置</h2>
+        <label class="field"><span id="focus-send-label">前台也发送</span>
+          <div class="chips">
+            <button type="button" class="chip on" id="notify-when-focused">前台也发送</button>
+          </div>
+        </label>
+        <label class="field"><span id="proxy-mode-label">代理</span>
+          <div class="pick" id="proxy-mode-pick">
+            <button type="button" class="pick-trigger" id="proxy-mode-trigger">
+              <span id="proxy-mode-value">自动获取</span>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4.2 6.2a.7.7 0 0 1 1-.05L8 8.8l2.8-2.65a.7.7 0 1 1 1 1L8.5 10.2a.7.7 0 0 1-1 0L4.25 7.15a.7.7 0 0 1-.05-1z"/></svg>
+            </button>
+            <div class="pick-menu" id="proxy-mode-menu">
+              <button type="button" class="pick-option selected" data-proxy-mode="auto">自动获取</button>
+              <button type="button" class="pick-option" data-proxy-mode="manual">手动填写</button>
+            </div>
+          </div>
+        </label>
+        <p class="hint" id="proxy-detect"></p>
+        <label class="field" id="proxy-url-field" hidden><span id="proxy-url-label">代理地址</span><input id="proxy-url" type="text" placeholder="http://127.0.0.1:7890" /></label>
+        <div class="sheet-actions">
+          <span class="spacer"></span>
+          <button type="button" id="settings-cancel">取消</button>
+          <button type="button" class="primary" id="settings-save">保存</button>
+        </div>
+      </div>
+    </div>
+    <div class="float-card" id="float-card" hidden>
+      <div class="float-title" id="float-title"></div>
+      <div class="float-body" id="float-body"></div>
+    </div>
+    <script>
+      const METHODS = ["POST", "PUT", "GET"];
+      const TYPE_ORDER = ["feishu", "dingtalk", "wecom", "kook", "serverchan", "telegram", "webhook", "api"];
+      const APPLY_URLS = {
+        feishu: "https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot",
+        dingtalk: "https://open.dingtalk.com/document/orgapp/custom-robot-access",
+        wecom: "https://developer.work.weixin.qq.com/document/path/91770",
+        kook: "https://developer.kookapp.cn/doc/http/guild",
+        serverchan: "https://sct.ftqq.com/",
+        telegram: "https://t.me/BotFather",
+      };
+      const DEFAULT_EVENTS = {
+        running: false,
+        waiting_input: true,
+        waiting_approval: true,
+        completed: true,
+        failed: true,
+        interrupted: false,
+      };
+      const DEFAULT_BODY = '{"title":"{{title}}","status":"{{status}}","statusLabel":"{{statusLabel}}","sessionId":"{{sessionId}}","at":"{{at}}"}';
+      const VAR_KEYS = [
+        { key: "title", zh: "会话标题", en: "Session title", example: "写 README" },
+        { key: "status", zh: "状态代码", en: "Status code", example: "waiting_input" },
+        { key: "statusLabel", zh: "状态中文", en: "Status label", example: "等待输入" },
+        { key: "sessionId", zh: "会话短 ID", en: "Short session id", example: "abcd1234" },
+        { key: "at", zh: "发送时间", en: "Send time", example: "2026-04-08T12:00:00.000Z" },
+      ];
+      const copy = {
+        "zh-CN": {
+          heading: "会话通知",
+          lede: "状态变化时只发送标题和状态。可重复添加同类型，每条自己起名、自己启用。",
+          channels: "推送方式",
+          add: "添加推送",
+          editTitle: "修改推送",
+          addTitle: "添加推送",
+          type: "类型",
+          name: "名称",
+          url: "Webhook 地址",
+          apiUrl: "API 地址",
+          secretFeishu: "签名密钥（可选）",
+          secretDing: "加签密钥（可选）",
+          sendKey: "SendKey",
+          token: "Bot Token",
+          chat: "Chat ID",
+          method: "方法",
+          headers: "请求头（可选）",
+          body: "正文模板",
+          proxyChannel: "代理",
+          useProxy: "使用代理",
+          events: "通知事件",
+          apply: "申请地址→",
+          copied: "已复制",
+          save: "保存",
+          cancel: "取消",
+          test: "测试",
+          edit: "修改",
+          on: "启用",
+          off: "关闭",
+          remove: "删除",
+          removeAgain: "确认删除",
+          log: "最近推送",
+          emptyChannels: "还没有推送方式。",
+          emptyLog: "还没有推送记录。",
+          okBadge: "成功",
+          failBadge: "失败",
+          varExample: "例如：",
+          settings: "设置",
+          settingsAria: "设置",
+          focusSend: "前台也发送",
+          proxyMode: "代理",
+          proxyAuto: "自动获取",
+          proxyManual: "手动填写",
+          proxyUrl: "代理地址",
+          proxyNone: "未检测到系统/环境代理。Clash 常见 http://127.0.0.1:7890",
+          proxyFound: "当前检测到：",
+          hints: {
+            feishu: "飞书群机器人 Webhook。签名密钥只在机器人开了「签名校验」时才填，没开就留空。",
+            dingtalk: "钉钉群机器人 Webhook。加签密钥只在机器人开了「加签」时才填，没开就留空。",
+            wecom: "企业微信群机器人的 Webhook 地址。",
+            kook: "KOOK 频道 Webhook 地址。",
+            serverchan: "只填 Server酱 SendKey（一般 SCT 开头）。不用填 Webhook 地址。",
+            telegram: "在 Telegram 打开 @BotFather，发送 /newbot 创建机器人后复制 Bot Token。Chat ID：公开频道可填 @频道用户名；私聊与普通群必须填数字 ID，不能填个人 @用户名。国内网络请打开「使用代理」。",
+            webhook: "通用 Webhook：往任意 URL POST 固定 JSON（title、status、statusLabel、sessionId、at、text）。飞书/钉钉/企微/KOOK/Server酱/Telegram 请用专用类型；要改方法和正文模板用自定义 API。",
+            api: "自己定方法、请求头和正文。API 地址、请求头、正文模板都可以插入下面的变量。",
+          },
+          placeholders: {
+            feishu: "https://open.feishu.cn/open-apis/bot/v2/hook/…",
+            dingtalk: "https://oapi.dingtalk.com/robot/send?access_token=…",
+            wecom: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…",
+            kook: "https://www.kookapp.cn/api/v3/hooks/…",
+            serverchan: "SCTxxxxxxxx",
+            telegramToken: "123456:ABC…",
+            telegramChat: "123456789 或 @channelname",
+            webhook: "https://example.com/hook",
+            api: "http://127.0.0.1:3000/send_private_msg",
+          },
+        },
+        en: {
+          heading: "Session Notify",
+          lede: "On status change, only title and status are sent. Add the same type more than once; each channel has its own name and enable switch.",
+          channels: "Channels",
+          add: "Add channel",
+          editTitle: "Edit channel",
+          addTitle: "Add channel",
+          type: "Type",
+          name: "Name",
+          url: "Webhook URL",
+          apiUrl: "API URL",
+          secretFeishu: "Signing secret (optional)",
+          secretDing: "Signing secret (optional)",
+          sendKey: "SendKey",
+          token: "Bot Token",
+          chat: "Chat ID",
+          method: "Method",
+          headers: "Headers (optional)",
+          body: "Body template",
+          proxyChannel: "Proxy",
+          useProxy: "Use proxy",
+          events: "Events",
+          apply: "Apply here →",
+          copied: "Copied",
+          save: "Save",
+          cancel: "Cancel",
+          test: "Test",
+          edit: "Edit",
+          on: "On",
+          off: "Off",
+          remove: "Delete",
+          removeAgain: "Confirm delete",
+          log: "Recent sends",
+          emptyChannels: "No channels yet.",
+          emptyLog: "No sends yet.",
+          okBadge: "OK",
+          failBadge: "Failed",
+          varExample: "e.g. ",
+          settings: "Settings",
+          settingsAria: "Settings",
+          focusSend: "Also send in foreground",
+          proxyMode: "Proxy",
+          proxyAuto: "Auto detect",
+          proxyManual: "Manual",
+          proxyUrl: "Proxy URL",
+          proxyNone: "No system/env proxy found. Clash is often http://127.0.0.1:7890",
+          proxyFound: "Detected: ",
+          hints: {
+            feishu: "Feishu group bot webhook. Fill the signing secret only if signature verification is on.",
+            dingtalk: "DingTalk group bot webhook. Fill the secret only if additional signing is on.",
+            wecom: "WeCom group bot webhook URL.",
+            kook: "KOOK channel webhook URL.",
+            serverchan: "ServerChan SendKey only (usually starts with SCT). No webhook URL.",
+            telegram: "Open @BotFather in Telegram, send /newbot, then paste the Bot Token. Chat ID: public channels may use @channelusername; private chats and groups require a numeric ID, not a personal @username. Turn on Use proxy if Telegram is blocked.",
+            webhook: "Generic webhook: POST fixed JSON (title, status, statusLabel, sessionId, at, text) to any URL. Use a dedicated type for Feishu / DingTalk / WeCom / KOOK / ServerChan / Telegram; use Custom API to change method and body.",
+            api: "Your own method, headers and body. API URL, headers and body all accept the variables below.",
+          },
+          placeholders: {
+            feishu: "https://open.feishu.cn/open-apis/bot/v2/hook/…",
+            dingtalk: "https://oapi.dingtalk.com/robot/send?access_token=…",
+            wecom: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…",
+            kook: "https://www.kookapp.cn/api/v3/hooks/…",
+            serverchan: "SCTxxxxxxxx",
+            telegramToken: "123456:ABC…",
+            telegramChat: "123456789 or @channelname",
+            webhook: "https://example.com/hook",
+            api: "http://127.0.0.1:3000/send_private_msg",
+          },
+        },
+      };
+
+      let locale = "zh-CN";
+      let eventKeys = [];
+      let labels = {};
+      let channelNames = {};
+      let channels = [];
+      let proxy = { mode: "auto", url: "" };
+      let notifyWhenFocused = true;
+      let proxyDetected = "";
+      let draft = null;
+      let editingId = null;
+      let deleteArmed = false;
+      let applyCopiedTimer = 0;
+      let settingsDraft = null;
+
+      function t() { return copy[locale] || copy["zh-CN"]; }
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const input = document.createElement("textarea");
+          input.value = text;
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          input.remove();
+        }
+      }
+      function hideFloat() {
+        document.getElementById("float-card").hidden = true;
+      }
+      function showFloat(anchor, title, body) {
+        const card = document.getElementById("float-card");
+        document.getElementById("float-title").textContent = title;
+        document.getElementById("float-body").textContent = body;
+        card.hidden = false;
+        const rect = anchor.getBoundingClientRect();
+        const width = Math.min(280, card.offsetWidth || 240);
+        const height = card.offsetHeight || 80;
+        let left = rect.left;
+        let top = rect.bottom + 8;
+        if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - width - 8);
+        if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 8);
+        card.style.left = `${left}px`;
+        card.style.top = `${top}px`;
+      }
+      function renderVars() {
+        const box = document.getElementById("var-buttons");
+        const c = t();
+        box.innerHTML = VAR_KEYS.map((item) => {
+          const label = locale === "en" ? item.en : item.zh;
+          return `<button type="button" class="var-btn" data-var="${item.key}" data-label="${escapeHtml(label)}" data-example="${escapeHtml(item.example)}">{{${item.key}}}</button>`;
+        }).join("");
+      }
+      function applyAppearance(look) {
+        const theme = String(look?.theme || look?.base || "").toLowerCase();
+        document.documentElement.dataset.base = theme.includes("light") ? "light" : "dark";
+      }
+      function nid() {
+        return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      }
+      function shortUrl(url) {
+        const text = String(url || "").trim();
+        if (!text) return "";
+        try {
+          const parsed = new URL(text);
+          return parsed.host + parsed.pathname.replace(/\/$/, "");
+        } catch {
+          return text;
+        }
+      }
+      function blankChannel(type) {
+        const kind = TYPE_ORDER.includes(type) ? type : "feishu";
+        return {
+          id: nid(),
+          type: kind,
+          enabled: true,
+          name: channelNames[kind] || kind,
+          url: "",
+          secret: "",
+          sendKey: "",
+          botToken: "",
+          chatId: "",
+          method: "POST",
+          headers: "",
+          bodyTemplate: kind === "api" ? DEFAULT_BODY : "",
+          useProxy: false,
+          events: { ...DEFAULT_EVENTS },
+        };
+      }
+
+      function applyCopy() {
+        const c = t();
+        document.getElementById("heading").textContent = c.heading;
+        document.getElementById("lede").textContent = c.lede;
+        document.getElementById("channels-title").textContent = c.channels;
+        document.getElementById("add").textContent = c.add;
+        document.getElementById("log-title").textContent = c.log;
+        document.getElementById("type-label").textContent = c.type;
+        document.getElementById("name-label").textContent = c.name;
+        document.getElementById("url-label").textContent = c.url;
+        document.getElementById("sendkey-label").textContent = c.sendKey;
+        document.getElementById("token-label").textContent = c.token;
+        document.getElementById("chat-label").textContent = c.chat;
+        document.getElementById("method-label").textContent = c.method;
+        document.getElementById("headers-label").textContent = c.headers;
+        document.getElementById("body-label").textContent = c.body;
+        document.getElementById("proxy-channel-label").textContent = c.proxyChannel;
+        document.getElementById("use-proxy").textContent = c.useProxy;
+        document.getElementById("events-label").textContent = c.events;
+        document.getElementById("apply-link").textContent = c.apply;
+        document.getElementById("cancel").textContent = c.cancel;
+        document.getElementById("save").textContent = c.save;
+        document.getElementById("settings").setAttribute("aria-label", c.settingsAria);
+        document.getElementById("settings-title").textContent = c.settings;
+        document.getElementById("focus-send-label").textContent = c.focusSend;
+        document.getElementById("notify-when-focused").textContent = c.focusSend;
+        document.getElementById("proxy-mode-label").textContent = c.proxyMode;
+        document.getElementById("proxy-url-label").textContent = c.proxyUrl;
+        document.getElementById("settings-cancel").textContent = c.cancel;
+        document.getElementById("settings-save").textContent = c.save;
+        document.querySelector('[data-proxy-mode="auto"]').textContent = c.proxyAuto;
+        document.querySelector('[data-proxy-mode="manual"]').textContent = c.proxyManual;
+        renderVars();
+      }
+
+      function closePicks() {
+        for (const pick of document.querySelectorAll(".pick.open")) {
+          pick.classList.remove("open");
+        }
+      }
+
+      function renderTypeMenu() {
+        document.getElementById("type-menu").innerHTML = TYPE_ORDER.map((type) => {
+          const extra = type === "api" ? " muted" : "";
+          const selected = draft?.type === type ? " selected" : "";
+          return `<button type="button" class="pick-option${extra}${selected}" data-type="${type}">${escapeHtml(channelNames[type] || type)}</button>`;
+        }).join("");
+      }
+
+      function renderEventChips() {
+        const events = draft?.events || DEFAULT_EVENTS;
+        document.getElementById("event-chips").innerHTML = eventKeys.map((key) => {
+          const on = events[key] ? " on" : "";
+          return `<button type="button" class="chip${on}" data-event="${key}">${escapeHtml(labels[key] || key)}</button>`;
+        }).join("");
+      }
+
+      function syncDraftFields() {
+        if (!draft) return;
+        const c = t();
+        document.getElementById("type-value").textContent = channelNames[draft.type] || draft.type;
+        document.getElementById("type-hint").textContent = c.hints[draft.type] || "";
+        const applyUrl = APPLY_URLS[draft.type] || "";
+        const applyLink = document.getElementById("apply-link");
+        applyLink.hidden = !applyUrl;
+        applyLink.dataset.url = applyUrl;
+        if (applyCopiedTimer) {
+          clearTimeout(applyCopiedTimer);
+          applyCopiedTimer = 0;
+        }
+        applyLink.textContent = c.apply;
+        document.getElementById("name").value = draft.name || "";
+        document.getElementById("url").value = draft.url || "";
+        document.getElementById("url").placeholder = c.placeholders[draft.type] || "";
+        document.getElementById("url-field").hidden = draft.type === "serverchan" || draft.type === "telegram";
+        document.getElementById("secret").value = draft.secret || "";
+        document.getElementById("secret-label").textContent = draft.type === "dingtalk" ? c.secretDing : c.secretFeishu;
+        document.getElementById("secret-field").hidden = draft.type !== "feishu" && draft.type !== "dingtalk";
+        document.getElementById("sendKey").value = draft.sendKey || "";
+        document.getElementById("sendKey").placeholder = c.placeholders.serverchan || "";
+        document.getElementById("sendkey-field").hidden = draft.type !== "serverchan";
+        document.getElementById("botToken").value = draft.botToken || "";
+        document.getElementById("botToken").placeholder = c.placeholders.telegramToken || "";
+        document.getElementById("chatId").value = draft.chatId || "";
+        document.getElementById("chatId").placeholder = c.placeholders.telegramChat || "";
+        document.getElementById("telegram-fields").hidden = draft.type !== "telegram";
+        document.getElementById("api-fields").hidden = draft.type !== "api";
+        document.getElementById("var-buttons").hidden = draft.type !== "api";
+        document.getElementById("url-label").textContent = draft.type === "api" ? c.apiUrl : c.url;
+        document.getElementById("method-value").textContent = METHODS.includes(draft.method) ? draft.method : "POST";
+        document.getElementById("headers").value = draft.headers || "";
+        document.getElementById("bodyTemplate").value = draft.bodyTemplate || "";
+        document.getElementById("use-proxy").classList.toggle("on", Boolean(draft.useProxy));
+        for (const opt of document.querySelectorAll("[data-method]")) {
+          opt.classList.toggle("selected", opt.dataset.method === draft.method);
+        }
+        renderTypeMenu();
+        renderEventChips();
+      }
+
+      function readDraftFromForm() {
+        if (!draft) return;
+        draft.url = document.getElementById("url").value.trim();
+        draft.secret = document.getElementById("secret").value;
+        draft.sendKey = document.getElementById("sendKey").value.trim();
+        draft.botToken = document.getElementById("botToken").value.trim();
+        draft.chatId = document.getElementById("chatId").value.trim();
+        draft.headers = document.getElementById("headers").value;
+        draft.bodyTemplate = document.getElementById("bodyTemplate").value;
+        draft.method = document.getElementById("method-value").textContent || "POST";
+        draft.name = document.getElementById("name").value.trim() || channelNames[draft.type] || draft.type;
+        draft.useProxy = document.getElementById("use-proxy").classList.contains("on");
+      }
+
+      function openSheet(channel, isEdit) {
+        draft = {
+          ...blankChannel(channel?.type || "feishu"),
+          ...(channel || {}),
+          events: { ...DEFAULT_EVENTS, ...(channel?.events || {}) },
+        };
+        editingId = isEdit ? channel.id : null;
+        deleteArmed = false;
+        const c = t();
+        document.getElementById("sheet-title").textContent = isEdit ? c.editTitle : c.addTitle;
+        const del = document.getElementById("delete");
+        del.hidden = !isEdit;
+        del.textContent = c.remove;
+        syncDraftFields();
+        document.getElementById("overlay").classList.add("open");
+      }
+
+      function closeSheet() {
+        closePicks();
+        hideFloat();
+        draft = null;
+        editingId = null;
+        deleteArmed = false;
+        document.getElementById("overlay").classList.remove("open");
+      }
+
+      function channelMeta(ch) {
+        if (ch.type === "serverchan") return ch.sendKey || "—";
+        if (ch.type === "telegram") return ch.chatId || "—";
+        return shortUrl(ch.url) || "—";
+      }
+
+      function renderChannels() {
+        const box = document.getElementById("channels");
+        const c = t();
+        if (!channels.length) {
+          box.innerHTML = `<p class="empty">${c.emptyChannels}</p>`;
+          return;
+        }
+        box.innerHTML = channels.map((ch) => {
+          const on = ch.enabled !== false;
+          const name = ch.name || channelNames[ch.type] || ch.type;
+          return `<div class="bar" data-id="${escapeHtml(ch.id)}">
+            <div class="bar-main">
+              <div class="bar-name">${escapeHtml(name)}${on ? '<span class="dot"></span>' : ""}</div>
+              <div class="bar-url">${escapeHtml(channelNames[ch.type] || ch.type)} · ${escapeHtml(channelMeta(ch))}</div>
+            </div>
+            <div class="bar-actions">
+              <button type="button" class="toggle${on ? " on" : ""}" data-enable>${on ? c.on : c.off}</button>
+              <button type="button" data-test>${c.test}</button>
+              <button type="button" data-edit>${c.edit}</button>
+            </div>
+          </div>`;
+        }).join("");
+      }
+
+      function renderLog(items) {
+        const box = document.getElementById("log");
+        const c = t();
+        if (!items?.length) {
+          box.innerHTML = `<p class="empty">${c.emptyLog}</p>`;
+          return;
+        }
+        box.innerHTML = items.map((item) => {
+          const when = item.at ? new Date(item.at).toLocaleString() : "";
+          const channel = item.channel ? escapeHtml(item.channel) : "";
+          const badge = item.ok
+            ? `<span class="badge ok">${c.okBadge}</span>`
+            : `<span class="badge bad" data-tip="${escapeHtml(item.detail || "")}">${c.failBadge}</span>`;
+          return `<div class="log-item"><div class="top"><strong>${escapeHtml(item.title || "")}</strong> · ${escapeHtml(item.statusLabel || item.status || "")} ${badge}</div><div class="meta">${channel}${channel && when ? " · " : ""}${escapeHtml(when)}</div></div>`;
+        }).join("");
+      }
+
+      function fill(state) {
+        locale = state.locale === "en" ? "en" : "zh-CN";
+        eventKeys = state.eventKeys || Object.keys(DEFAULT_EVENTS);
+        labels = state.labels || {};
+        channelNames = state.channelNames || {};
+        const config = state.config || {};
+        channels = Array.isArray(config.channels) ? config.channels : [];
+        proxy = config.proxy && typeof config.proxy === "object" ? config.proxy : { mode: "auto", url: "" };
+        notifyWhenFocused = config.notifyWhenFocused !== false;
+        proxyDetected = String(state.proxyDetected || "");
+        applyCopy();
+        renderChannels();
+        renderLog(state.log || []);
+      }
+
+      function syncSettingsFields() {
+        const c = t();
+        const mode = settingsDraft?.mode === "manual" ? "manual" : "auto";
+        document.getElementById("proxy-mode-value").textContent = mode === "manual" ? c.proxyManual : c.proxyAuto;
+        document.getElementById("proxy-url").value = settingsDraft?.url || "";
+        document.getElementById("proxy-url-field").hidden = mode !== "manual";
+        document.getElementById("proxy-detect").textContent = proxyDetected
+          ? c.proxyFound + proxyDetected
+          : c.proxyNone;
+        const focusOn = settingsDraft?.notifyWhenFocused !== false;
+        document.getElementById("notify-when-focused").classList.toggle("on", focusOn);
+        document.getElementById("notify-when-focused").textContent = c.focusSend;
+        for (const opt of document.querySelectorAll("[data-proxy-mode]")) {
+          opt.classList.toggle("selected", opt.dataset.proxyMode === mode);
+        }
+      }
+
+      function openSettings() {
+        settingsDraft = {
+          mode: proxy.mode === "manual" ? "manual" : "auto",
+          url: proxy.url || "",
+          notifyWhenFocused,
+        };
+        syncSettingsFields();
+        document.getElementById("settings-overlay").classList.add("open");
+      }
+
+      function closeSettings() {
+        closePicks();
+        settingsDraft = null;
+        document.getElementById("settings-overlay").classList.remove("open");
+      }
+
+      async function invoke(channel, payload) {
+        return window.pluginBridge.invoke(channel, payload || {});
+      }
+      async function persist() {
+        fill(await invoke("notify.save", { channels }));
+      }
+
+      document.getElementById("add").addEventListener("click", () => openSheet(blankChannel("feishu"), false));
+      document.getElementById("cancel").addEventListener("click", closeSheet);
+      document.getElementById("overlay").addEventListener("click", (event) => {
+        if (event.target === document.getElementById("overlay")) closeSheet();
+      });
+      document.getElementById("settings").addEventListener("click", openSettings);
+      document.getElementById("settings-cancel").addEventListener("click", closeSettings);
+      document.getElementById("settings-overlay").addEventListener("click", (event) => {
+        if (event.target === document.getElementById("settings-overlay")) closeSettings();
+      });
+      document.getElementById("type-trigger").addEventListener("click", (event) => {
+        event.preventDefault();
+        const pick = document.getElementById("type-pick");
+        const open = !pick.classList.contains("open");
+        closePicks();
+        pick.classList.toggle("open", open);
+      });
+      document.getElementById("type-menu").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-type]");
+        if (!btn || !draft) return;
+        readDraftFromForm();
+        const previousDefault = channelNames[draft.type] || draft.type;
+        const keepName = draft.name && draft.name !== previousDefault;
+        draft.type = btn.dataset.type;
+        if (!keepName) draft.name = channelNames[draft.type] || draft.type;
+        if (draft.type !== "api") {
+          draft.bodyTemplate = "";
+          draft.headers = "";
+          draft.method = "POST";
+        } else if (!draft.bodyTemplate) {
+          draft.bodyTemplate = DEFAULT_BODY;
+        }
+        closePicks();
+        syncDraftFields();
+      });
+      document.getElementById("method-trigger").addEventListener("click", (event) => {
+        event.preventDefault();
+        const pick = document.getElementById("method-pick");
+        const open = !pick.classList.contains("open");
+        closePicks();
+        pick.classList.toggle("open", open);
+      });
+      document.getElementById("method-menu").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-method]");
+        if (!btn || !draft) return;
+        draft.method = btn.dataset.method;
+        closePicks();
+        syncDraftFields();
+      });
+      document.getElementById("proxy-mode-trigger").addEventListener("click", (event) => {
+        event.preventDefault();
+        const pick = document.getElementById("proxy-mode-pick");
+        const open = !pick.classList.contains("open");
+        closePicks();
+        pick.classList.toggle("open", open);
+      });
+      document.getElementById("proxy-mode-menu").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-proxy-mode]");
+        if (!btn || !settingsDraft) return;
+        settingsDraft.mode = btn.dataset.proxyMode;
+        closePicks();
+        syncSettingsFields();
+      });
+      document.getElementById("use-proxy").addEventListener("click", () => {
+        if (!draft) return;
+        draft.useProxy = !draft.useProxy;
+        document.getElementById("use-proxy").classList.toggle("on", Boolean(draft.useProxy));
+      });
+      document.getElementById("notify-when-focused").addEventListener("click", () => {
+        if (!settingsDraft) return;
+        settingsDraft.notifyWhenFocused = settingsDraft.notifyWhenFocused === false;
+        document.getElementById("notify-when-focused").classList.toggle("on", settingsDraft.notifyWhenFocused !== false);
+      });
+      document.getElementById("apply-link").addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const url = APPLY_URLS[draft?.type];
+        if (!url) return;
+        const link = event.currentTarget;
+        await copyText(url);
+        link.textContent = t().copied;
+        if (applyCopiedTimer) clearTimeout(applyCopiedTimer);
+        applyCopiedTimer = setTimeout(() => {
+          link.textContent = t().apply;
+          applyCopiedTimer = 0;
+        }, 1200);
+        showFloat(link, t().copied, url);
+      });
+      document.getElementById("event-chips").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-event]");
+        if (!btn || !draft) return;
+        draft.events[btn.dataset.event] = !draft.events[btn.dataset.event];
+        renderEventChips();
+      });
+      document.getElementById("save").addEventListener("click", async () => {
+        if (!draft) return;
+        readDraftFromForm();
+        if (editingId) {
+          channels = channels.map((ch) => (ch.id === editingId ? { ...draft, id: editingId } : ch));
+        } else {
+          channels = [...channels, draft];
+        }
+        closeSheet();
+        await persist();
+      });
+      document.getElementById("settings-save").addEventListener("click", async () => {
+        if (!settingsDraft) return;
+        settingsDraft.url = document.getElementById("proxy-url").value.trim();
+        settingsDraft.notifyWhenFocused = document.getElementById("notify-when-focused").classList.contains("on");
+        fill(await invoke("notify.save", {
+          proxy: { mode: settingsDraft.mode, url: settingsDraft.url },
+          notifyWhenFocused: settingsDraft.notifyWhenFocused,
+        }));
+        closeSettings();
+      });
+      document.getElementById("delete").addEventListener("click", async () => {
+        if (!editingId) return;
+        const c = t();
+        if (!deleteArmed) {
+          deleteArmed = true;
+          document.getElementById("delete").textContent = c.removeAgain;
+          return;
+        }
+        channels = channels.filter((ch) => ch.id !== editingId);
+        closeSheet();
+        await persist();
+      });
+      document.getElementById("channels").addEventListener("click", async (event) => {
+        const bar = event.target.closest("[data-id]");
+        if (!bar) return;
+        const id = bar.dataset.id;
+        const ch = channels.find((item) => item.id === id);
+        if (!ch) return;
+        if (event.target.closest("[data-enable]")) {
+          ch.enabled = ch.enabled === false;
+          await persist();
+          return;
+        }
+        if (event.target.closest("[data-edit]")) {
+          openSheet(ch, true);
+          return;
+        }
+        if (event.target.closest("[data-test]")) {
+          const btn = event.target.closest("[data-test]");
+          btn.disabled = true;
+          try {
+            await persist();
+            await invoke("notify.test", { channelId: id });
+            fill(await invoke("notify.get"));
+          } catch {
+            fill(await invoke("notify.get"));
+          } finally {
+            btn.disabled = false;
+          }
+        }
+      });
+      document.getElementById("var-buttons").addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-var]");
+        if (!btn) return;
+        const token = `{{${btn.dataset.var}}}`;
+        try {
+          await navigator.clipboard.writeText(token);
+        } catch {
+          const input = document.createElement("textarea");
+          input.value = token;
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          input.remove();
+        }
+      });
+      document.addEventListener("mouseover", (event) => {
+        const tip = event.target.closest("[data-tip]");
+        if (tip) {
+          showFloat(tip, t().failBadge, tip.dataset.tip || "");
+          return;
+        }
+        const apply = event.target.closest("#apply-link");
+        if (apply && apply.dataset.url) {
+          showFloat(apply, t().apply, apply.dataset.url);
+          return;
+        }
+        const v = event.target.closest("[data-var]");
+        if (v) {
+          showFloat(v, v.dataset.label || v.dataset.var, `${t().varExample}${v.dataset.example || ""}`);
+        }
+      });
+      document.addEventListener("mouseout", (event) => {
+        const from = event.target.closest("[data-tip], [data-var], #apply-link");
+        const to = event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest("[data-tip], [data-var], #apply-link");
+        if (from && from !== to) hideFloat();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        hideFloat();
+        if (document.querySelector(".pick.open")) closePicks();
+        else if (document.getElementById("overlay").classList.contains("open")) closeSheet();
+        else if (document.getElementById("settings-overlay").classList.contains("open")) closeSettings();
+      });
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest(".pick")) closePicks();
+      });
+
+      window.pluginBridge?.on("appearance:changed", applyAppearance);
+      window.pluginBridge?.invoke("app.getAppearance").then(applyAppearance).catch(() => applyAppearance(null));
+      invoke("notify.get").then(fill).catch(() => {});
+    </script>
+  </body>
+</html>
