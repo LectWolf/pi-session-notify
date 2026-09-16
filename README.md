@@ -2,6 +2,8 @@
 
 PI-Desktop 插件。监听**全部会话**的状态变化，把**标题 + 状态**推到你添加的通道。不读消息正文，不接 QQ 官方 API。
 
+![会话通知面板](docs/panel.png)
+
 - 插件 id：`cc.mcii.session-notify`
 - 许可证：[GPL-3.0-only](./LICENSE)
 - 源码：https://github.com/LectWolf/pi-session-notify
