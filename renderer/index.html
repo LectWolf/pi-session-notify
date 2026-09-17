@@ -640,6 +640,14 @@
       function applyAppearance(look) {
         const theme = String(look?.theme || look?.base || "").toLowerCase();
         document.documentElement.dataset.base = theme.includes("light") ? "light" : "dark";
+        const mapped = String(look?.locale || look?.language || "")
+          .trim()
+          .toLowerCase()
+          .replaceAll("_", "-");
+        if (mapped && (mapped === "zh" || mapped.startsWith("zh-") || mapped.includes("hans"))) {
+          locale = "zh-CN";
+          applyCopy();
+        }
       }
       function nid() {
         return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -862,7 +870,8 @@
       }
 
       function fill(state) {
-        locale = state.locale === "en" ? "en" : "zh-CN";
+        const raw = String(state.locale || "").toLowerCase().replaceAll("_", "-");
+        locale = !raw || raw === "zh" || raw.startsWith("zh-") || raw.includes("hans") ? "zh-CN" : "en";
         eventKeys = state.eventKeys || Object.keys(DEFAULT_EVENTS);
         labels = state.labels || {};
         channelNames = state.channelNames || {};

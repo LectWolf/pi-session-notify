@@ -2,27 +2,27 @@
   "schemaVersion": 1,
   "id": "cc.mcii.session-notify",
   "name": "Session Notify",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Watch session status and push title + state to Feishu, DingTalk, WeCom, KOOK, ServerChan, Telegram, a generic webhook, or a custom API.",
   "license": "GPL-3.0-only",
   "homepage": "https://plugins.aiuo.net/plugins/cc.mcii.session-notify",
   "repository": "https://github.com/LectWolf/pi-session-notify",
   "author": "LectWolf",
   "categories": ["productivity", "developer-tools"],
-  "changelog": "1.0.0 first release\n- Add Feishu / DingTalk / WeCom / KOOK / ServerChan / Telegram / webhook channels\n- Optional HTTP proxy per channel\n- Apply address copies the official docs URL\n- Optional skip while PI-Desktop is in the foreground",
+  "changelog": "1.0.1\n- Follow PI-Desktop UI language on each panel open and send; no longer stick to English after boot\n- Copy apply-address URLs instead of opening the system browser\n1.0.0 first release\n- Add Feishu / DingTalk / WeCom / KOOK / ServerChan / Telegram / webhook channels\n- Optional HTTP proxy per channel\n- Optional skip while PI-Desktop is in the foreground",
   "safetyNotes": "Reads only local PI-Desktop session titles and turn status from pi.sqlite. Does not read message text. When a channel is enabled, sends title and status to that channel. Optional HTTP proxy is used only for channels that turn it on. No QQ official API. No agent tools.",
   "i18n": {
     "en": {
       "name": "Session Notify",
       "description": "Watch session status and push title + state to Feishu, DingTalk, WeCom, KOOK, ServerChan, Telegram, a generic webhook, or a custom API.",
       "safetyNotes": "Reads only local session titles and turn status. Does not read message text. Outbound HTTP goes only to the channels you add. Optional proxy is per channel. No official QQ API and no agent tools.",
-      "changelog": "1.0.0 first release\n- Add Feishu / DingTalk / WeCom / KOOK / ServerChan / Telegram / webhook channels\n- Optional HTTP proxy per channel\n- Apply address copies the official docs URL\n- Optional skip while PI-Desktop is in the foreground"
+      "changelog": "1.0.1\n- Follow PI-Desktop UI language on each panel open and send; no longer stick to English after boot\n- Copy apply-address URLs instead of opening the system browser"
     },
     "zh-CN": {
       "name": "会话通知",
       "description": "监听会话状态变化，推送到飞书、钉钉、企业微信、KOOK、Server酱、Telegram 或通用 Webhook。自定义 API 可选。",
       "safetyNotes": "只读取本机会话标题和回合状态，不读消息正文。启用某条通道后仅向该通道发送标题和状态。代理仅对勾选「使用代理」的通道生效。不接 QQ 官方 API，不注册 Agent 工具。",
-      "changelog": "1.0.0 首次发布\n- 可添加飞书 / 钉钉 / 企业微信 / KOOK / Server酱 / Telegram / 通用 Webhook\n- 每条通道可选用 HTTP 代理\n- 各类型申请地址点击复制\n- 可选择 PI-Desktop 在前台时不发送"
+      "changelog": "1.0.1\n- 修复了开机后语言卡在英文的问题，面板和推送跟 PI-Desktop 界面语言走\n- 申请地址改为点击复制，不再尝试打开外部浏览器"
     }
   },
   "main": "main.js",

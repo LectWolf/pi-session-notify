@@ -141,6 +141,18 @@ function isZh() {
   return locale === "zh-CN";
 }
 
+function localeFromRaw(raw) {
+  const text = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", "-");
+  if (!text) return "";
+  if (text === "zh" || text.startsWith("zh-") || text.includes("hans") || text.includes("chinese")) {
+    return "zh-CN";
+  }
+  return "en";
+}
+
 function labels() {
   return LABELS[isZh() ? "zh-CN" : "en"];
 }
@@ -801,6 +813,7 @@ function isHostForeground() {
 }
 
 async function sendChange(session, eventKey, reason, channelId) {
+  await refreshLocale();
   const config = readConfig();
   if (reason !== "test" && config.notifyWhenFocused === false && isHostForeground()) {
     return { ok: false, skipped: "focused" };
@@ -863,7 +876,8 @@ async function tick() {
   }
 }
 
-function panelState() {
+async function panelState() {
+  await refreshLocale();
   const config = readConfig();
   return {
     ok: true,
@@ -914,6 +928,7 @@ function testFields() {
 }
 
 async function testSend(payload) {
+  await refreshLocale();
   const config = readConfig();
   const one = payload?.channelId
     ? config.channels.find((ch) => ch.id === payload.channelId)
@@ -923,12 +938,24 @@ async function testSend(payload) {
 }
 
 async function refreshLocale() {
+  const candidates = [];
   try {
-    const raw = String((await pi.app.getLocale()) || "").toLowerCase();
-    locale = raw.startsWith("zh") ? "zh-CN" : "en";
+    candidates.push(await pi.app.getLocale());
   } catch {
-    locale = "zh-CN";
+    /* ignore */
   }
+  try {
+    const look = await pi.app.getAppearance();
+    candidates.push(look?.locale, look?.language);
+  } catch {
+    /* ignore */
+  }
+  const mapped = candidates.map(localeFromRaw).filter(Boolean);
+  if (mapped.includes("zh-CN")) {
+    locale = "zh-CN";
+    return;
+  }
+  locale = mapped[0] || "zh-CN";
 }
 
 function startPolling() {
